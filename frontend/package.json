@@ -14,7 +14,10 @@
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.2",
     "axios": "^1.7.7",
-    "recharts": "^2.12.7"
+    "recharts": "^2.12.7",
+    "@tanstack/react-query": "^5.51.23",
+    "lucide-react": "^0.436.0",
+    "zustand": "^4.5.5"
   },
   "devDependencies": {
     "@types/react": "^18.3.5",
