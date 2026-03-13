@@ -1,5 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { marketApi, StockSummary, StockDetail, Forecast, AnomalyFlag } from '../lib/api'
+import {
+  marketApi,
+  StockSummary,
+  StockDetail,
+  Forecast,
+  AnomalyFlag,
+  MarketIndexData,
+  MoverStock,
+} from '../lib/api'
 
 // ── Stock list ────────────────────────────────────────────────────────────────
 
@@ -13,7 +21,7 @@ export function useMarketData() {
     setError(null)
     try {
       const data = await marketApi.getStocks()
-      setStocks(data)
+      setStocks(data ?? [])
     } catch (err: any) {
       setError(err?.response?.data?.detail ?? 'Failed to load market data.')
     } finally {
@@ -144,6 +152,66 @@ export function useAnomalies(_exchange: string = 'NSE', days = 7) {
   }, [stocks.length, days])
 
   return { anomalies, loading }
+}
+
+// ── Market indices (NSE 20, NASI) ──────────────────────────────────────────────
+
+export function useIndices() {
+  const [indices, setIndices] = useState<MarketIndexData[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchIndices = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await marketApi.getIndices()
+      setIndices(data ?? [])
+    } catch {
+      // Indices are a nice-to-have header strip — fail quietly rather than
+      // blocking the rest of the dashboard from rendering.
+      setError('Index data unavailable.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchIndices()
+  }, [fetchIndices])
+
+  return { indices, loading, error, refetch: fetchIndices }
+}
+
+// ── Server-computed top movers ─────────────────────────────────────────────────
+
+export function useMarketMovers(limit = 5) {
+  const [gainers, setGainers] = useState<MoverStock[]>([])
+  const [losers, setLosers] = useState<MoverStock[]>([])
+  const [asOf, setAsOf] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchMovers = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await marketApi.getMovers(limit)
+      setGainers(data.gainers ?? [])
+      setLosers(data.losers ?? [])
+      setAsOf(data.as_of ?? null)
+    } catch (err: any) {
+      setError(err?.response?.data?.detail ?? 'Failed to load market movers.')
+    } finally {
+      setLoading(false)
+    }
+  }, [limit])
+
+  useEffect(() => {
+    fetchMovers()
+  }, [fetchMovers])
+
+  return { gainers, losers, asOf, loading, error, refetch: fetchMovers }
 }
 
 // ── Auto-refresh ──────────────────────────────────────────────────────────────
