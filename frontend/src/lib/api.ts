@@ -44,15 +44,35 @@ export const authApi = {
 
 // ── Market ──────────────────────────────────────────────────────────────────
 export const marketApi = {
+  // Defensive fallbacks (`?? []`) below: if the backend ever returns a
+  // payload without the expected key (empty DB, partial outage, schema
+  // drift) we get an empty list instead of `undefined` blowing up every
+  // `.map`/`.sort`/spread call downstream in the hooks and pages.
   getStocks: () =>
-    api.get<{ total: number; stocks: StockSummary[] }>('/api/market/stocks').then((r) => r.data.stocks),
-  getStock: (symbol: string) => api.get<StockDetail>(`/api/market/stocks/${symbol}`).then((r) => r.data),
+    api
+      .get<{ total: number; stocks: StockSummary[] }>('/api/market/stocks')
+      .then((r) => r.data.stocks ?? []),
+
+  getStock: (symbol: string) =>
+    api.get<StockDetail>(`/api/market/stocks/${symbol}`).then((r) => r.data),
+
   getForecast: (symbol: string, horizon: 5 | 20 = 5) =>
     api.get<Forecast>(`/api/market/forecast/${symbol}`, { params: { horizon } }).then((r) => r.data),
+
   getAnomalies: (symbol: string, days = 7) =>
     api
       .get<{ anomalies: AnomalyFlag[] }>(`/api/market/anomalies/${symbol}`, { params: { days } })
-      .then((r) => r.data.anomalies),
+      .then((r) => r.data.anomalies ?? []),
+
+  getIndices: () =>
+    api
+      .get<{ indices: MarketIndexData[] }>('/api/market/indices')
+      .then((r) => r.data.indices ?? []),
+
+  getMovers: (limit = 10) =>
+    api
+      .get<MoversResponse>('/api/market/movers', { params: { limit } })
+      .then((r) => r.data),
 }
 
 // ── Portfolio ────────────────────────────────────────────────────────────────
@@ -122,6 +142,28 @@ export interface AnomalyFlag {
   price: number
   volume: number
   price_change_pct: number
+}
+
+export interface MarketIndexData {
+  name: string
+  value: number
+  change: number | null
+  recorded_at: string | null
+}
+
+export interface MoverStock {
+  symbol: string
+  name: string
+  sector: string | null
+  last_price: number | null
+  price_change: number | null
+  price_change_pct: number
+}
+
+export interface MoversResponse {
+  as_of: string
+  gainers: MoverStock[]
+  losers: MoverStock[]
 }
 
 export interface Holding {
