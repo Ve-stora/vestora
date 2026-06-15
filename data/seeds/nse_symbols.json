@@ -1,0 +1,26 @@
+{
+  "exchange": "NSE",
+  "last_updated": "2026-06-01",
+  "symbols": [
+    {"symbol": "SCOM",  "name": "Safaricom PLC",               "sector": "Telecommunication"},
+    {"symbol": "EQTY",  "name": "Equity Group Holdings",       "sector": "Banking"},
+    {"symbol": "KCB",   "name": "KCB Group PLC",               "sector": "Banking"},
+    {"symbol": "COOP",  "name": "Co-operative Bank of Kenya",  "sector": "Banking"},
+    {"symbol": "ABSA",  "name": "Absa Bank Kenya PLC",         "sector": "Banking"},
+    {"symbol": "NCBA",  "name": "NCBA Group PLC",              "sector": "Banking"},
+    {"symbol": "DTK",   "name": "Diamond Trust Bank Kenya",    "sector": "Banking"},
+    {"symbol": "STAN",  "name": "Standard Chartered Kenya",    "sector": "Banking"},
+    {"symbol": "NMG",   "name": "Nation Media Group",          "sector": "Media"},
+    {"symbol": "BAMB",  "name": "Bamburi Cement PLC",          "sector": "Manufacturing"},
+    {"symbol": "EABL",  "name": "East African Breweries",      "sector": "Manufacturing"},
+    {"symbol": "JUB",   "name": "Jubilee Holdings",            "sector": "Insurance"},
+    {"symbol": "BRIT",  "name": "Britam Holdings",             "sector": "Insurance"},
+    {"symbol": "CIC",   "name": "CIC Insurance Group",         "sector": "Insurance"},
+    {"symbol": "KEGN",  "name": "KenGen PLC",                  "sector": "Energy"},
+    {"symbol": "KPLC",  "name": "Kenya Power & Lighting",      "sector": "Energy"},
+    {"symbol": "SREB",  "name": "Stanbic Holdings Kenya",      "sector": "Banking"},
+    {"symbol": "KNRE",  "name": "Kenya Re-Insurance",          "sector": "Insurance"},
+    {"symbol": "BOC",   "name": "BOC Kenya PLC",               "sector": "Manufacturing"},
+    {"symbol": "SASN",  "name": "Sasini PLC",                  "sector": "Agriculture"}
+  ]
+}
