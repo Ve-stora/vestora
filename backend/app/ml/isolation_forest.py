@@ -1,140 +1,181 @@
 """
 Vestora Anomaly Detection — Isolation Forest
 =============================================
-Detects statistical outliers in price and volume data on EAC exchanges.
-Thresholds are calibrated per-symbol based on individual liquidity profiles.
-
-A volume spike on Safaricom (high liquidity) means something different
-than the same spike on a low-cap USE counter — adaptive thresholds handle this.
-
-Output is always framed as statistical observation, not evidence of wrongdoing.
+Per-symbol adaptive thresholds — a volume spike on Safaricom
+means something different than on a low-cap USE counter.
+All outputs framed as statistical observations.
 """
 
+import pickle
 import numpy as np
 import pandas as pd
 from typing import Dict, List, Optional
-from datetime import date
+from datetime import date, timedelta
+from pathlib import Path
+
+from app.ml.feature_engineering import add_returns, add_volume_features, add_price_gap
+
+MODELS_DIR = Path(__file__).parent / "models"
+MODELS_DIR.mkdir(exist_ok=True)
+
+ANOMALY_FEATURE_COLS = [
+    "return_zscore",
+    "volume_deviation",
+    "unusual_vol",
+    "price_gap",
+    "return_1d",
+]
 
 
 class VestoraAnomalyDetector:
-    """
-    Isolation Forest anomaly detection per symbol.
-    Features: price return z-score, volume deviation, bid-ask anomaly, time-of-day.
-    """
 
     def __init__(self, contamination: float = 0.05):
-        """
-        contamination: expected proportion of anomalies in dataset.
-        0.05 = 5% — conservative for thin markets where sparse trades
-        can look anomalous even when legitimate.
-        """
         self.contamination = contamination
-        self.models: Dict = {}
+        self._models: Dict = {}
 
-    def build_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Anomaly feature set:
-        - return_zscore: daily return normalised by 30-day rolling std
-        - volume_deviation: (volume - 30d mean) / 30d std
-        - price_gap: |open - prev_close| / prev_close (overnight gap)
-        - unusual_volume_flag: binary
-        """
-        df = df.copy().sort_values("date")
+    # ── Feature prep ────────────────────────────────────────────
 
-        df["return_1d"]      = df["close"].pct_change()
-        df["vol_mean30"]     = df["volume"].rolling(30).mean()
-        df["vol_std30"]      = df["volume"].rolling(30).std()
-        df["return_mean30"]  = df["return_1d"].rolling(30).mean()
-        df["return_std30"]   = df["return_1d"].rolling(30).std()
+    def _build_anomaly_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy().sort_values("date").reset_index(drop=True)
+        df = add_returns(df)
+        df = add_volume_features(df)
+        df = add_price_gap(df)
 
-        df["return_zscore"]    = (df["return_1d"] - df["return_mean30"]) / df["return_std30"]
-        df["volume_deviation"] = (df["volume"] - df["vol_mean30"]) / df["vol_std30"]
-        df["unusual_volume"]   = (df["volume"] > df["vol_mean30"] * 2.5).astype(float)
+        ret_mean30 = df["return_1d"].rolling(30, min_periods=10).mean()
+        ret_std30  = df["return_1d"].rolling(30, min_periods=10).std().replace(0, 1)
 
-        # Price gap (requires open price — optional)
-        if "open" in df.columns:
-            df["price_gap"] = abs(df["open"] - df["close"].shift(1)) / df["close"].shift(1)
-        else:
-            df["price_gap"] = 0.0
+        df["return_zscore"]    = ((df["return_1d"] - ret_mean30) / ret_std30).fillna(0).clip(-6, 6)
+        df["volume_deviation"] = df.get("vol_zscore", pd.Series(0, index=df.index))
 
-        return df.dropna()
+        return df.dropna(subset=["return_zscore"])
+
+    # ── Fit ─────────────────────────────────────────────────────
 
     def fit(self, symbol: str, df: pd.DataFrame) -> None:
-        """Fit Isolation Forest for a specific symbol."""
         try:
             from sklearn.ensemble import IsolationForest
         except ImportError:
-            raise RuntimeError("scikit-learn not installed — run: pip install scikit-learn")
+            raise RuntimeError("pip install scikit-learn")
 
-        features = self.build_features(df)
-        cols = ["return_zscore", "volume_deviation", "unusual_volume", "price_gap"]
-        X = features[cols].values
+        features = self._build_anomaly_features(df)
+        cols     = [c for c in ANOMALY_FEATURE_COLS if c in features.columns]
+        X        = features[cols].values
 
         model = IsolationForest(
             contamination=self.contamination,
+            n_estimators=200,
             random_state=42,
-            n_estimators=100,
+            n_jobs=-1,
         )
         model.fit(X)
-        self.models[symbol] = {"model": model, "feature_cols": cols}
 
-    def detect(self, symbol: str, df: pd.DataFrame) -> List[Dict]:
+        meta = {"model": model, "feature_cols": cols, "fitted_on": date.today().isoformat()}
+        self._models[symbol] = meta
+        self._save(symbol, meta)
+
+    # ── Detect ──────────────────────────────────────────────────
+
+    def detect(self, symbol: str, df: pd.DataFrame,
+               last_n_days: Optional[int] = None) -> List[Dict]:
         """
-        Run anomaly detection on full history.
-        Returns list of flagged dates with type, score, and description.
+        Run anomaly detection. Returns list of flagged records.
+        Optionally filter to last N days.
         """
-        if symbol not in self.models:
+        meta = self._load_or_get(symbol)
+        if meta is None:
             return []
 
-        model_data = self.models[symbol]
-        features   = self.build_features(df)
-        X          = features[model_data["feature_cols"]].values
+        features = self._build_anomaly_features(df)
+        cols     = [c for c in meta["feature_cols"] if c in features.columns]
+        X        = features[cols].values
 
-        model  = model_data["model"]
-        preds  = model.predict(X)          # -1 = anomaly, 1 = normal
-        scores = model.score_samples(X)    # lower = more anomalous
+        model       = meta["model"]
+        preds       = model.predict(X)           # -1 anomaly, 1 normal
+        raw_scores  = model.score_samples(X)     # more negative = more anomalous
 
-        # Normalise scores to 0-1 (higher = more anomalous)
-        scores_norm = 1 - (scores - scores.min()) / (scores.max() - scores.min() + 1e-9)
+        # Normalise to 0–1 (higher = more anomalous)
+        s_min, s_max = raw_scores.min(), raw_scores.max()
+        scores_norm  = 1 - (raw_scores - s_min) / (s_max - s_min + 1e-9)
 
         flags = []
         for i, (pred, score) in enumerate(zip(preds, scores_norm)):
-            if pred == -1:
-                row = features.iloc[i]
-                anomaly_type = self._classify_anomaly(row)
-                flags.append({
-                    "symbol":        symbol,
-                    "exchange":      "NSE",
-                    "date":          str(row["date"]) if "date" in row.index else features.index[i],
-                    "anomaly_type":  anomaly_type,
-                    "anomaly_score": round(float(score), 3),
-                    "description":   self._describe(anomaly_type, row),
-                    "disclaimer":    (
-                        "Anomaly detection identifies statistical outliers. "
-                        "It does not constitute investment advice or imply knowledge "
-                        "of any specific corporate event."
-                    ),
-                })
+            if pred != -1:
+                continue
+
+            row          = features.iloc[i]
+            anomaly_type = self._classify(row)
+            flag_date    = str(row.get("date", "")) if "date" in features.columns else ""
+
+            if last_n_days and flag_date:
+                cutoff = (date.today() - timedelta(days=last_n_days)).isoformat()
+                if flag_date < cutoff:
+                    continue
+
+            flags.append({
+                "symbol":        symbol,
+                "exchange":      "NSE",
+                "date":          flag_date,
+                "anomaly_type":  anomaly_type,
+                "anomaly_score": round(float(score), 3),
+                "description":   self._describe(anomaly_type, row),
+                "disclaimer": (
+                    "Statistical anomaly — not evidence of wrongdoing or investment advice."
+                ),
+            })
 
         return sorted(flags, key=lambda x: x["anomaly_score"], reverse=True)
 
-    def _classify_anomaly(self, row: pd.Series) -> str:
-        if abs(row.get("volume_deviation", 0)) > 3:
+    def detect_latest(self, symbol: str, df: pd.DataFrame) -> Optional[Dict]:
+        """Check if the most recent row is anomalous."""
+        all_flags = self.detect(symbol, df, last_n_days=2)
+        return all_flags[0] if all_flags else None
+
+    # ── Helpers ──────────────────────────────────────────────────
+
+    def _classify(self, row: pd.Series) -> str:
+        if abs(row.get("volume_deviation", 0)) > 2.5:
             return "volume_spike"
-        if abs(row.get("return_zscore", 0)) > 3:
+        if abs(row.get("return_zscore", 0)) > 2.5:
             return "price_gap"
-        if row.get("price_gap", 0) > 0.05:
+        if row.get("price_gap", 0) > 0.04:
             return "overnight_gap"
         return "composite"
 
     def _describe(self, anomaly_type: str, row: pd.Series) -> str:
-        descriptions = {
-            "volume_spike":   f"Trading volume was {abs(row.get('volume_deviation', 0)):.1f} standard deviations above the 30-day baseline. This statistical anomaly may indicate significant corporate activity or institutional trading.",
-            "price_gap":      f"Daily return was {abs(row.get('return_zscore', 0)):.1f} standard deviations from the 30-day mean. Unusual price movement detected.",
-            "overnight_gap":  f"Opening price diverged significantly from previous close. Overnight gap of {row.get('price_gap', 0)*100:.1f}% detected.",
-            "composite":      "Multiple indicators deviated simultaneously from baseline. Composite anomaly flagged.",
-        }
-        return descriptions.get(anomaly_type, "Statistical anomaly detected.")
+        vol_dev  = abs(row.get("volume_deviation", 0))
+        ret_z    = abs(row.get("return_zscore", 0))
+        gap      = row.get("price_gap", 0) * 100
+
+        return {
+            "volume_spike":   f"Volume {vol_dev:.1f}σ above 30-day baseline. May indicate institutional activity or significant corporate event.",
+            "price_gap":      f"Return {ret_z:.1f}σ from 30-day mean. Unusual price movement relative to recent history.",
+            "overnight_gap":  f"Opening price diverged {gap:.1f}% from previous close. Overnight information event possible.",
+            "composite":      "Multiple indicators deviated simultaneously from baseline.",
+        }.get(anomaly_type, "Statistical anomaly detected.")
+
+    # ── Persistence ──────────────────────────────────────────────
+
+    def _save(self, symbol: str, meta: Dict) -> None:
+        with open(MODELS_DIR / f"{symbol}_iso.pkl", "wb") as f:
+            pickle.dump(meta, f)
+
+    def _load(self, symbol: str) -> Optional[Dict]:
+        path = MODELS_DIR / f"{symbol}_iso.pkl"
+        if path.exists():
+            with open(path, "rb") as f:
+                return pickle.load(f)
+        return None
+
+    def _load_or_get(self, symbol: str) -> Optional[Dict]:
+        if symbol in self._models:
+            return self._models[symbol]
+        meta = self._load(symbol)
+        if meta:
+            self._models[symbol] = meta
+        return meta
+
+    def is_fitted(self, symbol: str) -> bool:
+        return self._load_or_get(symbol) is not None
 
 
 detector = VestoraAnomalyDetector()
