@@ -1,28 +1,37 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider } from "./store/AuthContext";
-import ProtectedRoute from "./components/shared/ProtectedRoute";
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { useAuthStore } from './lib/authStore'
+import Layout from './components/layout/Layout'
+import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
+import DashboardPage from './pages/DashboardPage'
+import StockPage from './pages/StockPage'
+import PortfolioPage from './pages/PortfolioPage'
+import AnalyticsPage from './pages/AnalyticsPage'
 
-import Dashboard   from "./pages/Dashboard";
-import Market      from "./pages/Market";
-import Portfolio   from "./pages/Portfolio";
-import Analytics   from "./pages/Analytics";
-import Login       from "./pages/Login";
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  const token = useAuthStore((s) => s.token)
+  return token ? <>{children}</> : <Navigate to="/login" replace />
+}
 
 export default function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route element={<ProtectedRoute />}>
-            <Route path="/"           element={<Dashboard />} />
-            <Route path="/market"     element={<Market />} />
-            <Route path="/portfolio"  element={<Portfolio />} />
-            <Route path="/analytics"  element={<Analytics />} />
-          </Route>
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
-  );
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+      <Route
+        path="/"
+        element={
+          <RequireAuth>
+            <Layout />
+          </RequireAuth>
+        }
+      >
+        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route path="dashboard" element={<DashboardPage />} />
+        <Route path="stocks/:symbol" element={<StockPage />} />
+        <Route path="portfolio" element={<PortfolioPage />} />
+        <Route path="analytics" element={<AnalyticsPage />} />
+      </Route>
+    </Routes>
+  )
 }
