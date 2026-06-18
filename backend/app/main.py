@@ -1,69 +1,91 @@
+"""
+Vestora Backend — FastAPI Application Entry Point
+"""
+
+import asyncio
+import logging
+from contextlib import asynccontextmanager
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-import logging
 
-from app.database import init_db, AsyncSessionLocal
-from app.api import auth, market, portfolio, analytics, b2b
-from app.config import settings
+from app.api.routes import market
+from app.core.database import SessionLocal, init_db
+from app.services.nse_pipeline import NSEPipeline
 
-logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("vestora")
+
+scheduler = AsyncIOScheduler(timezone="Africa/Nairobi")
+
+
+async def run_scheduled_sync():
+    """Daily NSE data sync — runs at 16:45 EAT (after NSE close at 15:30)."""
+    logger.info("Scheduled NSE sync starting...")
+    db = SessionLocal()
+    try:
+        async with NSEPipeline(db) as pipeline:
+            result = await pipeline.run_full_sync()
+        logger.info(f"Scheduled sync complete: {result}")
+    except Exception as e:
+        logger.error(f"Scheduled sync failed: {e}")
+    finally:
+        db.close()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # ── Startup ──────────────────────────────────────────────────────────────
-    logger.info("Vestora starting up — env=%s", settings.APP_ENV)
+    # Startup
+    init_db()
+    logger.info("Database initialized")
 
-    # 1. Create DB tables
-    await init_db()
-    logger.info("Database tables initialised")
+    # Schedule daily sync: Mon–Fri at 16:45 EAT
+    scheduler.add_job(
+        run_scheduled_sync,
+        CronTrigger(day_of_week="mon-fri", hour=16, minute=45, timezone="Africa/Nairobi"),
+        id="nse_daily_sync",
+        replace_existing=True,
+    )
+    scheduler.start()
+    logger.info("NSE sync scheduler started")
 
-    # 2. Seed metadata (NSE symbols) — idempotent, skips existing records
-    async with AsyncSessionLocal() as db:
-        from app.db_seed import seed_database
-        await seed_database(db)
-
-    logger.info("Vestora ready — API available")
     yield
 
-    # ── Shutdown ─────────────────────────────────────────────────────────────
-    logger.info("Vestora shutting down")
+    # Shutdown
+    scheduler.shutdown(wait=False)
+    logger.info("Scheduler stopped")
 
 
 app = FastAPI(
     title="Vestora API",
-    description=(
-        "Pan-African Capital Markets Intelligence Layer. "
-        "Market data analytics for NSE, USE, and EAC exchanges. "
-        "Not investment advice."
-    ),
-    version="0.1.0",
+    description="Intelligence layer for East African capital markets.",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origins=["http://localhost:5173", "https://vestora.africa"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ── Routers ───────────────────────────────────────────────────────────────────
-app.include_router(auth.router,      prefix="/api/auth",      tags=["Auth"])
-app.include_router(market.router,    prefix="/api/market",    tags=["Market"])
-app.include_router(portfolio.router, prefix="/api/portfolio", tags=["Portfolio"])
-app.include_router(analytics.router, prefix="/api/ai",        tags=["Analytics"])
-app.include_router(b2b.router,       prefix="/api/b2b",       tags=["B2B"])
+app.include_router(market.router)
 
 
-# ── Health ────────────────────────────────────────────────────────────────────
-@app.get("/health", tags=["Health"])
+@app.get("/health")
 async def health():
+    return {"status": "ok", "version": "0.2.0"}
+
+
+@app.get("/")
+async def root():
     return {
-        "status":   "ok",
-        "platform": "Vestora",
-        "version":  "0.1.0",
-        "exchange": "NSE Phase 1",
+        "name": "Vestora API",
+        "description": "Intelligence layer for East African capital markets",
+        "docs": "/docs",
+        "health": "/health",
     }
