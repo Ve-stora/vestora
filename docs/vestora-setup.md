@@ -2,15 +2,12 @@
 
 Open VS Code terminal (`Ctrl+` `` ` ``) and run these top to bottom.
 
----
 
 ## 1. Create root and navigate
 
 ```bash
 mkdir vestora && cd vestora
 ```
-
----
 
 ## 2. Create folder structure
 
@@ -24,7 +21,6 @@ mkdir -p \
   docs
 ```
 
----
 
 ## 3. Create all files
 
@@ -97,7 +93,6 @@ touch \
   README.md
 ```
 
----
 
 ## 4. Verify structure
 
@@ -107,7 +102,6 @@ find . -type f | sort
 
 Expected output — every file listed alphabetically. Should be 50+ files across backend, frontend, data, and root.
 
----
 
 ## 5. Open in VS Code
 
@@ -115,7 +109,6 @@ Expected output — every file listed alphabetically. Should be 50+ files across
 code .
 ```
 
----
 
 ## After This
 
@@ -145,7 +138,6 @@ Start copy-pasting in this order — each file depends on the previous:
 22. `data/seeds/nse_symbols.json`
 23. `README.md`
 
----
 
 ## Install Dependencies (after pasting requirements.txt)
 
@@ -167,7 +159,6 @@ npx tailwindcss init -p
 npm install react-router-dom recharts lucide-react
 ```
 
----
 
 ## Run Without Docker (dev)
 
@@ -184,7 +175,6 @@ cd frontend
 npm run dev
 ```
 
----
 
 ## Run With Docker
 
