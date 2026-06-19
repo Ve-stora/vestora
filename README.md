@@ -6,7 +6,7 @@ Execution platforms enable trading. **Vestora enables understanding.**
 
 Vestora is an AI-powered market intelligence platform delivering price forecasting, anomaly detection, momentum signals, and macroeconomic context for East African equities, bonds, and beyond — built as a complementary analytics layer on top of execution platforms like Ziidi Trader, where access is expanding faster than analytical tools.
 
-> **Built in Uganda 🇺🇬 — Built for East Africa 🌍**
+> **Built for Africa 🌍**
 
 
 
@@ -42,7 +42,7 @@ Vestora is not competing with execution or portfolio platforms. It sits above th
 
 
 
-## 🎯 Vision
+## Vision
 
 To equip retail investors, diaspora, and small institutions with professional-grade intelligence for Africa's democratizing capital markets — where access is expanding faster than analytical tools.
 
@@ -51,10 +51,10 @@ To equip retail investors, diaspora, and small institutions with professional-gr
 ## ✨ Core Capabilities
 
 **Market Intelligence Dashboard**
-Real-time and historical NSE data. Market movers, sector performance, corporate actions, and event tracking — expanding across EAC exchanges.
+Real-time and historical NSE data. Market movers, sector performance, corporate actions, and event tracking — expanding across African exchanges.
 
 **AI Analytics Engine**
-Price forecasting built on custom XGBoost models trained on EAC market data. Isolation Forest anomaly detection calibrated for thin, low-liquidity emerging markets. Momentum and trend signals. Sentiment analysis from East African financial media.
+Price forecasting built on custom XGBoost models trained on African market data. Isolation Forest anomaly detection calibrated for thin, low-liquidity emerging markets. Momentum and trend signals. Sentiment analysis from East African financial media.
 
 **Portfolio Analytics**
 Performance tracking, risk and concentration analysis, scenario modeling, and historical benchmarking against NSE indices.
@@ -64,7 +64,7 @@ Structured, B2B-ready endpoints for brokers, SACCOs, and institutions that need 
 
 
 
-## 🛠 Tech Stack
+## Tech Stack
 
 | Layer | Technologies |
 |---|---|
@@ -79,7 +79,7 @@ Structured, B2B-ready endpoints for brokers, SACCOs, and institutions that need 
 ## 🏗 Architecture
 
 ```
-Market Data Sources (NSE, CBK, EAC exchanges)
+Market Data Sources (NSE, CBK, African stock exchanges)
               │
               ▼
    Data Pipeline & Normalization
@@ -101,15 +101,15 @@ Forecasting  Anomaly  Portfolio
 React Dashboard   B2B API
 ```
 
----
 
-## 🚀 Quick Start
+
+## Quick Start
 
 **Prerequisites**: Python 3.11+ · Node.js 20+ · Docker
 
 ```bash
-git clone https://github.com/Ve-stora/vestora-platform.git
-cd vestora-platform
+git clone https://github.com/Ve-stora/vestora.git
+cd vestora
 docker compose up --build
 ```
 
@@ -145,13 +145,13 @@ See [`docs/setup.md`](docs/setup.md) for full configuration.
 | **1 — NSE** | Now – End 2026 | Equities, bonds, T-bills. First B2B clients. |
 | **2 — USE** | Early 2027 | Uganda. Cross-market analytics. Diaspora features. |
 | **3 — DSE + RSE** | Mid 2027 | Tanzania + Rwanda. East African unified layer. |
-| **4 — Pan-African** | 2028+ | GSE, NGX. Institutional APIs. Series A. |
+| **4 — Pan-African** | 2028+ | GSE, NGX, JSX Institutional APIs. Series A. |
 
 Full detail: [`docs/roadmap.md`](docs/roadmap.md)
 
 
 
-## 💰 Revenue Model
+## Revenue Model
 
 **B2B API Licensing** *(primary)*
 White-label analytics for brokers, SACCOs, microfinance institutions, and boutique fund managers who need structured intelligence without Bloomberg pricing.
@@ -188,7 +188,7 @@ No buy/sell recommendations. No personalized financial advice. This mirrors the 
 
 See [`docs/api-framing.md`](docs/api-framing.md) for compliant output templates.
 
----
+
 
 ## 📚 Research
 
@@ -196,12 +196,12 @@ Vestora's ML components address genuinely underexplored territory in computation
 
 - **Price forecasting in thin emerging markets** — applying XGBoost ensemble methods to low-liquidity EAC equities where deep learning assumptions break down
 - **Anomaly detection** — Isolation Forest calibrated for markets with infrequent trading and limited regulatory enforcement history
-- **NLP on East African financial news** — sentiment and event extraction from regional media, not US/EU financial corpora
+- **NLP on African financial news** — sentiment and event extraction from regional media, not US/EU financial corpora
 
 **Active research questions:**
 - Do standard technical indicators retain predictive value below a liquidity threshold?
 - Can cross-listing price divergence between USE and NSE dual-listed securities be predicted systematically?
-- Does sentiment from East African financial media provide incremental predictive lift over price/volume features alone?
+- Does sentiment from African financial media provide incremental predictive lift over price/volume features alone?
 
 See [`docs/research-methodology.md`](docs/research-methodology.md) for data sources, model architecture, and evaluation methodology.
 
@@ -247,7 +247,7 @@ vestora-platform/
 
 
 
-**Contact**: veritasndiema@gmail.com · [LinkedIn](https://ug.linkedin.com/in/keith-ndiema-292k25) · [GitHub](https://github.com/Ve-stora)
+**Contact**: veritasndiema@gmail.com · [LinkedIn](https://ug.linkedin.com/in/keith-ndiema-292k25) · [GitHub](https://github.com/Ve-stora/vestora)
 
 **License**: AGPL-3.0
 
