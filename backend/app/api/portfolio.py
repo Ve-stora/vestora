@@ -1,37 +1,76 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from uuid import UUID
+from pydantic import BaseModel, Field, field_validator
+from typing import List
 
 from app.database import get_db
-from app.schemas.portfolio import PositionCreate, PortfolioResponse
-from app.services.portfolio import get_portfolio, add_position, remove_position
-from app.utils.auth import get_current_user
-from app.models.user import User
 
-router = APIRouter()
+router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
 
-@router.get("", response_model=PortfolioResponse)
-async def portfolio(
+class Holding(BaseModel):
+    symbol: str = Field(..., min_length=1, max_length=10, description="Ticker symbol")
+    weight: float = Field(..., gt=0, le=1.0, description="Portfolio weight (0–1)")
+    exchange: str = Field("NSE", description="Exchange code: NSE or USE")
+
+    @field_validator("symbol")
+    @classmethod
+    def uppercase_symbol(cls, v: str) -> str:
+        return v.upper()
+
+    @field_validator("exchange")
+    @classmethod
+    def uppercase_exchange(cls, v: str) -> str:
+        return v.upper()
+
+
+class PortfolioRequest(BaseModel):
+    holdings: List[Holding] = Field(
+        ...,
+        min_length=1,
+        max_length=50,
+        description="List of holdings. Weights must sum to 1.0.",
+    )
+
+    @field_validator("holdings")
+    @classmethod
+    def weights_must_sum_to_one(cls, holdings: List[Holding]) -> List[Holding]:
+        total = sum(h.weight for h in holdings)
+        if not (0.99 <= total <= 1.01):
+            raise ValueError(
+                f"Holding weights must sum to 1.0, got {total:.4f}. "
+                "Adjust your weights and resubmit."
+            )
+        return holdings
+
+
+class PortfolioResponse(BaseModel):
+    status: str
+    holdings_count: int
+    symbols: List[str]
+    total_weight: float
+    message: str
+    disclaimer: str
+
+
+@router.post(
+    "/analyze",
+    response_model=PortfolioResponse,
+    summary="Analyze a portfolio of NSE/USE holdings",
+)
+async def analyze_portfolio(
+    body: PortfolioRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ):
-    return await get_portfolio(db, current_user.id)
+    # TODO v0.2: wire to portfolio service
+    # from app.services.portfolio import compute_portfolio_analytics
+    # return await compute_portfolio_analytics(db, body.holdings)
 
-
-@router.post("", status_code=201)
-async def add(
-    payload: PositionCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    return await add_position(db, current_user.id, payload)
-
-
-@router.delete("/{position_id}", status_code=204)
-async def remove(
-    position_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    await remove_position(db, current_user.id, position_id)
+    return PortfolioResponse(
+        status="accepted",
+        holdings_count=len(body.holdings),
+        symbols=[h.symbol for h in body.holdings],
+        total_weight=round(sum(h.weight for h in body.holdings), 4),
+        message="Sharpe ratio, VaR, and correlation matrix shipping in v0.2.",
+        disclaimer="Not investment advice.",
+    )
