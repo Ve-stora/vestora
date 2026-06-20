@@ -19,7 +19,7 @@ fi
 
 source .venv/bin/activate
 echo "→ Installing Python dependencies..."
-pip install -q -r requirements.txt
+pip install -q -r ../requirements-minimal.txt
 
 # ── DB seed ─────────────────────────────────────────────
 echo "→ Seeding NSE data (180-day history for 20 stocks)..."
