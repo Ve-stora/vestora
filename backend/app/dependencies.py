@@ -3,11 +3,14 @@ Vestora FastAPI Dependencies
 ============================
 Centralises reusable Depends() callables.
 Import from here rather than from individual service modules.
+
+NOTE: The DB session is SYNCHRONOUS (standard SQLAlchemy).
+      The type hint uses Session (not AsyncSession).
 """
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import User, UserTier
@@ -16,9 +19,9 @@ from app.services.auth import decode_token, get_user_by_id
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
-async def get_current_user(
+def get_current_user(
     token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db),
+    db: Session = Depends(get_db),
 ) -> User:
     """Validate JWT and return the authenticated User. Raises 401 on failure."""
     exc = HTTPException(
@@ -32,13 +35,13 @@ async def get_current_user(
     user_id: str | None = payload.get("sub")
     if not user_id:
         raise exc
-    user = await get_user_by_id(db, user_id)
+    user = get_user_by_id(db, user_id)
     if user is None or not user.is_active:
         raise exc
     return user
 
 
-async def require_premium(current_user: User = Depends(get_current_user)) -> User:
+def require_premium(current_user: User = Depends(get_current_user)) -> User:
     """Require PREMIUM or B2B tier."""
     if current_user.tier not in (UserTier.PREMIUM, UserTier.B2B):
         raise HTTPException(
@@ -48,7 +51,7 @@ async def require_premium(current_user: User = Depends(get_current_user)) -> Use
     return current_user
 
 
-async def require_b2b(current_user: User = Depends(get_current_user)) -> User:
+def require_b2b(current_user: User = Depends(get_current_user)) -> User:
     """Require B2B tier — institutional/API clients only."""
     if current_user.tier != UserTier.B2B:
         raise HTTPException(
