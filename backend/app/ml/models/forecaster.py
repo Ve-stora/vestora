@@ -188,7 +188,7 @@ class NSEForecaster:
         """
         f = df.copy()
         c = f["close"]
-        v = f["volume"].replace(0, np.nan).fillna(method="ffill")
+        v = f["volume"].replace(0, np.nan).ffill()
 
         # Price momentum
         for w in [3, 5, 10, 20]:
