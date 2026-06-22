@@ -13,7 +13,7 @@ import xgboost as xgb
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.market import StockPrice
+from app.models.stock import StockPrice
 
 logger = logging.getLogger(__name__)
 
