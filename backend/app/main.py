@@ -11,8 +11,9 @@ from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import market
-from app.core.database import SessionLocal, init_db
+from app.api.routes import market as market_routes
+from app.api import router as api_router          # auth, portfolio, analytics, market (old)
+from app.database import SessionLocal, init_db    # was: app.core.database (doesn't exist)
 from app.services.nse_pipeline import NSEPipeline
 
 logging.basicConfig(level=logging.INFO)
@@ -73,7 +74,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(market.router)
+# Mount the newer routes/market router (sync SQLAlchemy, NSEPipeline-backed)
+app.include_router(market_routes.router)
+
+# Mount the full API router (auth, portfolio, analytics, legacy market)
+app.include_router(api_router)
 
 
 @app.get("/health")
