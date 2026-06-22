@@ -1,8 +1,15 @@
+"""
+Vestora Auth Utilities
+=======================
+FastAPI dependency callables for JWT authentication and tier enforcement.
+These wrap app.dependencies for use in route modules that import from utils.auth.
+"""
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
+from app.database import get_async_db          # async session — matches AsyncSession hint
 from app.models.user import User, UserTier
 from app.services.auth import decode_token, get_user_by_id
 
@@ -11,7 +18,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),  # was get_db (sync) — mismatch fixed
 ) -> User:
     credentials_exc = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -27,7 +34,7 @@ async def get_current_user(
     if user_id is None:
         raise credentials_exc
 
-    user = await get_user_by_id(db, user_id)
+    user = await get_user_by_id(db, user_id)   # async — must be awaited
     if user is None or not user.is_active:
         raise credentials_exc
 
