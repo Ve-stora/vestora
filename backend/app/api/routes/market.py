@@ -10,11 +10,11 @@ import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.database import get_db
 from app.models.market import DailyPrice, MarketIndex, Stock
 from app.services.nse_pipeline import NSEPipeline
-from ml.models.anomaly_detector import NSEAnomalyDetector
-from ml.models.forecaster import NSEForecaster
+from app.services.anomaly import NSEAnomalyDetector
+from app.ml.models.forecaster import NSEForecaster
 
 router = APIRouter(prefix="/api/market", tags=["market"])
 
