@@ -7,13 +7,15 @@ enforces data-vendor framing on every response.
 
 import json
 from typing import Dict, Optional
-from sqlalchemy.ext.asyncio import AsyncSession
+
 from openai import AsyncOpenAI
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.services.market import get_stocks, get_anomalies
-from app.utils.framing import wrap_analytics, DISCLAIMER
+from app.services.market import get_anomalies, get_stocks
+from app.utils.framing import DISCLAIMER, wrap_analytics
 
+# Exported so api/analytics.py can pass it through without duplicating
 SYSTEM_PROMPT = """
 You are Vestora's market analytics engine for East African capital markets,
 primarily the Nairobi Securities Exchange (NSE).
@@ -56,7 +58,6 @@ async def run_analytics_query(
             "sources": [],
         }
 
-    # Build context from live market data
     market_context = await _build_market_context(db, context)
 
     client = AsyncOpenAI(
@@ -75,7 +76,7 @@ async def run_analytics_query(
             model=settings.LLM_MODEL,
             messages=messages,
             max_tokens=600,
-            temperature=0.3,   # low temp for factual market analysis
+            temperature=0.3,
         )
         raw_answer = response.choices[0].message.content or ""
         return wrap_analytics(raw_answer)
@@ -90,10 +91,7 @@ async def run_analytics_query(
 
 
 async def _build_market_context(db: AsyncSession, extra: Optional[Dict] = None) -> str:
-    """
-    Build a compact market context string for the LLM.
-    Injects top movers and recent anomalies.
-    """
+    """Build a compact market context string for the LLM."""
     try:
         stocks    = await get_stocks(db, exchange="NSE")
         anomalies = await get_anomalies(db, exchange="NSE", days=3)
