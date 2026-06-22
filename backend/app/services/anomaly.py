@@ -55,10 +55,10 @@ class NSEAnomalyDetector:
     """
 
     # NSE-specific thresholds
-    CONTAMINATION = 0.04       # ~4% of trading days expected anomalous (higher than US markets)
-    MIN_ROWS = 20              # minimum history to detect anomalies
+    CONTAMINATION = 0.04       # ~4% of trading days expected anomalous
+    MIN_ROWS = 20
     VOLUME_SPIKE_MULT = 3.0    # volume > 3× 20d avg = spike
-    PRICE_CIRCUIT_PCT = 0.10   # NSE has ±10% single-day limit in theory
+    PRICE_CIRCUIT_PCT = 0.10   # NSE ±10% single-day circuit limit
 
     def __init__(self, symbol: str):
         self.symbol = symbol
@@ -88,11 +88,10 @@ class NSEAnomalyDetector:
         )
         self.model.fit(X_scaled)
 
-        # Store baseline stats for threshold rules
         self.feature_stats = {
-            "vol_mean": float(df["volume"].mean()),
-            "vol_std": float(df["volume"].std()),
-            "ret_std": float(df["close"].pct_change().std()),
+            "vol_mean":   float(df["volume"].mean()),
+            "vol_std":    float(df["volume"].std()),
+            "ret_std":    float(df["close"].pct_change().std()),
             "price_mean": float(df["close"].mean()),
         }
 
@@ -114,25 +113,24 @@ class NSEAnomalyDetector:
         if self.model is None:
             self._load()
 
-        df = self._prepare(df).tail(lookback + 30)  # extra rows for feature calc
+        df = self._prepare(df).tail(lookback + 30)   # extra rows for feature calc
         features = self._extract_features(df)
         eval_features = features.tail(lookback)
         eval_df = df.tail(len(eval_features))
 
-        X_scaled = self.scaler.transform(eval_features.values)
-        scores_raw = self.model.decision_function(X_scaled)   # negative = more anomalous
-        predictions = self.model.predict(X_scaled)             # -1 = anomaly, 1 = normal
+        X_scaled    = self.scaler.transform(eval_features.values)
+        scores_raw  = self.model.decision_function(X_scaled)   # negative = more anomalous
+        predictions = self.model.predict(X_scaled)              # -1 = anomaly, 1 = normal
 
-        # Normalize scores to 0–1 (higher = more anomalous)
         scores_norm = self._normalize_scores(scores_raw)
 
         results = []
         for i, (idx, row) in enumerate(eval_df.iterrows()):
-            is_anomaly = predictions[i] == -1
-            score = float(scores_norm[i])
+            is_anomaly    = predictions[i] == -1
+            score         = float(scores_norm[i])
             anomaly_types = self._classify_anomaly(row, df.iloc[max(0, i - 20):i])
-            severity = self._severity(score, anomaly_types)
-            description = self._describe(anomaly_types, row, df.iloc[max(0, i - 5):i])
+            severity      = self._severity(score, anomaly_types)
+            description   = self._describe(anomaly_types, row, df.iloc[max(0, i - 5):i])
 
             results.append(AnomalyResult(
                 symbol=self.symbol,
@@ -162,44 +160,47 @@ class NSEAnomalyDetector:
         """
         f = pd.DataFrame(index=df.index)
         c = df["close"]
-        v = df["volume"].replace(0, np.nan).fillna(method="ffill").fillna(1)
+        v = df["volume"].replace(0, np.nan).ffill().fillna(1)   # fixed: .ffill() not fillna(method=)
 
         # Price return features
-        f["ret_1d"] = c.pct_change(1)
-        f["ret_3d"] = c.pct_change(3)
-        f["ret_5d"] = c.pct_change(5)
+        f["ret_1d"]     = c.pct_change(1)
+        f["ret_3d"]     = c.pct_change(3)
+        f["ret_5d"]     = c.pct_change(5)
         f["abs_ret_1d"] = f["ret_1d"].abs()
 
         # Price deviation from rolling mean
-        f["price_dev_5d"] = (c - c.rolling(5).mean()) / c.rolling(5).std().replace(0, np.nan)
+        f["price_dev_5d"]  = (c - c.rolling(5).mean())  / c.rolling(5).std().replace(0, np.nan)
         f["price_dev_20d"] = (c - c.rolling(20).mean()) / c.rolling(20).std().replace(0, np.nan)
 
-        # Volume features (key for NSE anomaly detection)
-        vol_ma_5 = v.rolling(5).mean()
+        # Volume features
+        vol_ma_5  = v.rolling(5).mean()
         vol_ma_20 = v.rolling(20).mean()
-        f["vol_ratio_5d"] = v / vol_ma_5.replace(0, np.nan)
+        f["vol_ratio_5d"]  = v / vol_ma_5.replace(0, np.nan)
         f["vol_ratio_20d"] = v / vol_ma_20.replace(0, np.nan)
-        f["vol_dev_20d"] = (v - vol_ma_20) / v.rolling(20).std().replace(0, np.nan)
+        f["vol_dev_20d"]   = (v - vol_ma_20) / v.rolling(20).std().replace(0, np.nan)
 
-        # Price-volume divergence (price up + volume down = suspicious)
+        # Price-volume divergence
         f["pv_divergence"] = f["ret_1d"] * (-1 * f["vol_ratio_5d"].diff())
 
         # Volatility clustering
         f["vol_of_vol"] = f["ret_1d"].rolling(5).std()
         f["vol_change"] = f["vol_of_vol"].pct_change()
 
-        # High-low range (intraday data if available, else approximated)
+        # High-low range
         if "high" in df.columns and "low" in df.columns:
-            f["hl_range"] = (df["high"] - df["low"]) / c
-            f["hl_range_dev"] = (f["hl_range"] - f["hl_range"].rolling(10).mean()) / f["hl_range"].rolling(10).std().replace(0, np.nan)
+            f["hl_range"]     = (df["high"] - df["low"]) / c
+            f["hl_range_dev"] = (
+                (f["hl_range"] - f["hl_range"].rolling(10).mean())
+                / f["hl_range"].rolling(10).std().replace(0, np.nan)
+            )
         else:
-            f["hl_range"] = f["abs_ret_1d"]
+            f["hl_range"]     = f["abs_ret_1d"]
             f["hl_range_dev"] = f["price_dev_5d"]
 
-        # Consecutive directional moves (pump/dump pattern)
+        # Consecutive directional moves
         signs = np.sign(f["ret_1d"].fillna(0))
         f["consec_direction"] = signs.groupby((signs != signs.shift()).cumsum()).cumcount() + 1
-        f["consec_direction"] *= signs  # negative for consecutive down days
+        f["consec_direction"] *= signs
 
         f = f.replace([np.inf, -np.inf], np.nan).fillna(0)
         return f
@@ -210,39 +211,32 @@ class NSEAnomalyDetector:
         """Layer rule-based classifiers on top of Isolation Forest."""
         types = []
 
-        ret = row.get("ret_1d", 0)
-        vol = row.get("volume", 0)
-        close = row.get("close", 1)
+        ret   = row.get("ret_1d", 0)
+        vol   = row.get("volume", 0)
 
-        # Volume spike
         if len(history) >= 5:
             avg_vol = history["volume"].mean()
             if avg_vol > 0 and vol > avg_vol * self.VOLUME_SPIKE_MULT:
                 types.append("VOLUME_SPIKE")
 
-        # Circuit breaker approach (≥8% single day)
         if abs(ret) >= 0.08:
             types.append("CIRCUIT_BREAKER_PROXIMITY")
 
-        # Price-volume divergence (price up >3% on below-avg volume)
         if ret > 0.03 and len(history) >= 5:
             avg_vol = history["volume"].mean()
             if avg_vol > 0 and vol < avg_vol * 0.5:
                 types.append("PRICE_VOLUME_DIVERGENCE")
 
-        # Pump signal (≥5% gain, high volume)
         if ret >= 0.05 and len(history) >= 5:
             avg_vol = history["volume"].mean()
             if avg_vol > 0 and vol > avg_vol * 2:
                 types.append("PUMP_SIGNAL")
 
-        # Dump signal
         if ret <= -0.05 and len(history) >= 5:
             avg_vol = history["volume"].mean()
             if avg_vol > 0 and vol > avg_vol * 2:
                 types.append("DUMP_SIGNAL")
 
-        # Consecutive moves (5+ days same direction)
         if len(history) >= 5:
             recent_rets = history["close"].pct_change().tail(5)
             if all(recent_rets > 0):
@@ -260,20 +254,18 @@ class NSEAnomalyDetector:
             return "MEDIUM"
         return "LOW"
 
-    def _describe(
-        self, types: list[str], row: pd.Series, recent: pd.DataFrame
-    ) -> str:
+    def _describe(self, types: list[str], row: pd.Series, recent: pd.DataFrame) -> str:
         if not types:
             return "No significant anomaly detected for this trading session."
 
         descs = {
-            "VOLUME_SPIKE": f"Trading volume {int(row.get('volume', 0)):,} significantly exceeds 20-day average.",
-            "CIRCUIT_BREAKER_PROXIMITY": f"Single-day price movement of {row.get('ret_1d', 0)*100:.1f}% approaches NSE circuit limits.",
-            "PRICE_VOLUME_DIVERGENCE": "Price advanced on below-average volume — move may lack institutional conviction.",
-            "PUMP_SIGNAL": "Sharp price gain accompanied by elevated volume. Monitor for reversal.",
-            "DUMP_SIGNAL": "Sharp price decline with elevated volume. Possible forced selling or negative catalyst.",
-            "CONSECUTIVE_UP_5D": "Five consecutive up-days detected. Historically elevated mean-reversion risk.",
-            "CONSECUTIVE_DOWN_5D": "Five consecutive down-days detected. Watch for oversold bounce.",
+            "VOLUME_SPIKE":               f"Trading volume {int(row.get('volume', 0)):,} significantly exceeds 20-day average.",
+            "CIRCUIT_BREAKER_PROXIMITY":  f"Single-day price movement of {row.get('ret_1d', 0)*100:.1f}% approaches NSE circuit limits.",
+            "PRICE_VOLUME_DIVERGENCE":    "Price advanced on below-average volume — move may lack institutional conviction.",
+            "PUMP_SIGNAL":                "Sharp price gain accompanied by elevated volume. Monitor for reversal.",
+            "DUMP_SIGNAL":                "Sharp price decline with elevated volume. Possible forced selling or negative catalyst.",
+            "CONSECUTIVE_UP_5D":          "Five consecutive up-days detected. Historically elevated mean-reversion risk.",
+            "CONSECUTIVE_DOWN_5D":        "Five consecutive down-days detected. Watch for oversold bounce.",
         }
         return " | ".join(descs.get(t, t) for t in types)
 
@@ -291,7 +283,7 @@ class NSEAnomalyDetector:
 
     def _normalize_scores(self, raw: np.ndarray) -> np.ndarray:
         """Map decision function scores to [0, 1] where 1 = most anomalous."""
-        s = -raw  # flip sign (more negative raw = more anomalous)
+        s = -raw   # flip sign
         min_s, max_s = s.min(), s.max()
         if max_s == min_s:
             return np.zeros_like(s)
@@ -303,8 +295,8 @@ class NSEAnomalyDetector:
         path = MODEL_DIR / f"{self.symbol}_anomaly.pkl"
         with open(path, "wb") as f:
             pickle.dump({
-                "model": self.model,
-                "scaler": self.scaler,
+                "model":         self.model,
+                "scaler":        self.scaler,
                 "feature_stats": self.feature_stats,
             }, f)
 
@@ -314,6 +306,6 @@ class NSEAnomalyDetector:
             raise FileNotFoundError(f"No anomaly model for {self.symbol} — run fit() first")
         with open(path, "rb") as f:
             state = pickle.load(f)
-        self.model = state["model"]
-        self.scaler = state["scaler"]
+        self.model         = state["model"]
+        self.scaler        = state["scaler"]
         self.feature_stats = state["feature_stats"]
