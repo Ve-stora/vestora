@@ -1,7 +1,8 @@
 """
 Market API Router
 ==================
-Endpoints:
+Mounted at /api/market/* by app/api/__init__.py.
+
   GET /api/market/stocks              — latest prices, all symbols
   GET /api/market/stocks/{symbol}     — OHLCV history + stats
   GET /api/market/forecast/{symbol}   — XGBoost forecast
@@ -11,20 +12,21 @@ All responses include legal framing disclaimer.
 No personalized investment advice is ever returned.
 """
 
-from fastapi import APIRouter, Depends, Query, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 
-from app.database import get_db
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.database import get_async_db
 from app.schemas.market import (
-    StockListResponse,
-    StockDetailResponse,
-    ForecastResponse,
     AnomalyResponse,
+    ForecastResponse,
+    StockDetailResponse,
+    StockListResponse,
 )
-from app.services.market import get_stocks, get_stock_detail, get_anomalies
 from app.services.forecasting import run_forecast_for_symbol
-from app.utils.framing import DISCLAIMER, FORECAST_DISCLAIMER, ANOMALY_DISCLAIMER
+from app.services.market import get_anomalies, get_stock_detail, get_stocks
+from app.utils.framing import ANOMALY_DISCLAIMER, DISCLAIMER, FORECAST_DISCLAIMER
 
 router = APIRouter()
 
@@ -32,8 +34,8 @@ router = APIRouter()
 @router.get("/stocks", response_model=StockListResponse)
 async def list_stocks(
     exchange: str = Query("NSE", description="Exchange code: NSE or USE"),
-    sector:   Optional[str] = Query(None, description="Filter by sector"),
-    db:       AsyncSession  = Depends(get_db),
+    sector: Optional[str] = Query(None, description="Filter by sector"),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Returns current end-of-day market data for all listed securities.
@@ -59,10 +61,10 @@ async def list_stocks(
 
 @router.get("/stocks/{symbol}", response_model=StockDetailResponse)
 async def stock_detail(
-    symbol:   str,
+    symbol: str,
     exchange: str = Query("NSE"),
-    days:     int = Query(90, ge=5, le=1000, description="Historical lookback in days"),
-    db:       AsyncSession = Depends(get_db),
+    days: int = Query(90, ge=5, le=1000, description="Historical lookback in days"),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Returns OHLCV history and rolling statistics for a specific symbol.
@@ -85,10 +87,10 @@ async def stock_detail(
 
 @router.get("/forecast/{symbol}", response_model=ForecastResponse)
 async def forecast(
-    symbol:   str,
+    symbol: str,
     exchange: str = Query("NSE"),
-    horizon:  int = Query(5, ge=1, le=20, description="Forecast horizon in trading days"),
-    db:       AsyncSession = Depends(get_db),
+    horizon: int = Query(5, ge=1, le=20, description="Forecast horizon in trading days"),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Returns XGBoost directional forecast for symbol.
@@ -104,9 +106,7 @@ async def forecast(
         horizon=horizon,
     )
 
-    # Ensure required fields for response model
     if "error" in result and result["error"]:
-        # Return a valid response shape with the error surfaced
         return {
             "symbol":              symbol.upper(),
             "exchange":            exchange.upper(),
@@ -130,9 +130,9 @@ async def forecast(
 @router.get("/anomalies", response_model=AnomalyResponse)
 async def anomalies(
     exchange: str = Query("NSE"),
-    days:     int = Query(7, ge=1, le=30, description="Lookback window in days"),
-    symbol:   Optional[str] = Query(None, description="Filter to specific symbol"),
-    db:       AsyncSession  = Depends(get_db),
+    days: int = Query(7, ge=1, le=30, description="Lookback window in days"),
+    symbol: Optional[str] = Query(None, description="Filter to specific symbol"),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Returns recent Isolation Forest anomaly flags for the exchange.
