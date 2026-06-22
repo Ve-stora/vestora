@@ -13,7 +13,7 @@ import httpx
 from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
 
-from app.core.database import SessionLocal
+from app.database import SessionLocal
 from app.models.market import Stock, DailyPrice, Bond, MarketIndex
 
 logger = logging.getLogger(__name__)
