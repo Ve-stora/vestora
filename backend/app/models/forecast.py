@@ -1,10 +1,9 @@
 from sqlalchemy import Column, String, Float, Integer, Date, DateTime, Enum, Boolean
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 import uuid
 import enum
 
-from app.database import Base
+from app.database import Base, GUID
 
 
 class SignalDirection(str, enum.Enum):
@@ -17,7 +16,7 @@ class Forecast(Base):
     """Stored XGBoost forecast outputs per symbol."""
     __tablename__ = "forecasts"
 
-    id                  = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id                  = Column(GUID(), primary_key=True, default=uuid.uuid4)
     symbol              = Column(String, nullable=False, index=True)
     exchange            = Column(String, default="NSE")
     forecast_date       = Column(Date, nullable=False)        # date forecast was generated
@@ -35,7 +34,7 @@ class AnomalyFlag(Base):
     """Isolation Forest anomaly detection outputs."""
     __tablename__ = "anomaly_flags"
 
-    id             = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id             = Column(GUID(), primary_key=True, default=uuid.uuid4)
     symbol         = Column(String, nullable=False, index=True)
     exchange       = Column(String, default="NSE")
     date           = Column(Date, nullable=False)
