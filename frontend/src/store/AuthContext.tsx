@@ -23,9 +23,10 @@ import { authApi, type RegisterResponse } from '../lib/api';
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface User {
-  id: number;
+  id: string;
   email: string;
-  username: string;
+  full_name: string | null;
+  tier: 'free' | 'premium' | 'b2b';
 }
 
 interface AuthState {
@@ -37,7 +38,7 @@ interface AuthState {
 
 interface AuthContextValue extends AuthState {
   login: (email: string, password: string) => Promise<void>;
-  register: (username: string, email: string, password: string) => Promise<void>;
+  register: (email: string, password: string, fullName?: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -116,8 +117,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const register = useCallback(
-    async (username: string, email: string, password: string) => {
-      await authApi.register(username, email, password);
+    async (email: string, password: string, fullName?: string) => {
+      await authApi.register(email, password, fullName);
       // Auto-login after register
       await login(email, password);
     },
