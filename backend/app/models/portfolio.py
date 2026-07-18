@@ -1,17 +1,16 @@
 from sqlalchemy import Column, String, Float, DateTime, ForeignKey, Enum
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 import uuid
 
-from app.database import Base
+from app.database import Base, GUID
 from app.models.stock import Exchange
 
 
 class Portfolio(Base):
     __tablename__ = "portfolios"
 
-    id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id    = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"),
+    id         = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    user_id    = Column(GUID(), ForeignKey("users.id", ondelete="CASCADE"),
                         nullable=False, index=True)
     symbol     = Column(String, nullable=False)
     exchange   = Column(Enum(Exchange), default=Exchange.NSE)

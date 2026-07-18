@@ -1,10 +1,9 @@
 from sqlalchemy import Column, String, Float, BigInteger, Date, DateTime, Enum, Index
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 import uuid
 import enum
 
-from app.database import Base
+from app.database import Base, GUID
 
 
 class Exchange(str, enum.Enum):
@@ -18,7 +17,7 @@ class StockPrice(Base):
     """Daily OHLCV data per symbol per exchange."""
     __tablename__ = "stock_prices"
 
-    id         = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id         = Column(GUID(), primary_key=True, default=uuid.uuid4)
     symbol     = Column(String, nullable=False, index=True)
     exchange   = Column(Enum(Exchange), nullable=False, default=Exchange.NSE)
     date       = Column(Date, nullable=False, index=True)
