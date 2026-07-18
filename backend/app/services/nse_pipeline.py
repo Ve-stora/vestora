@@ -111,6 +111,85 @@ class NSEPipeline:
         logger.info(f"Equities sync: {upserted} records")
         return {"records": upserted}
 
+    async def seed_historical(self, days: int = 150) -> dict:
+        """
+        Backfill `days` trading days of synthetic OHLCV history per seed
+        equity, anchored on its SEED_EQUITIES price.
+
+        Why this exists: `sync_equities()` only ever upserts *today's* row
+        (one DailyPrice per Stock per call), because it mirrors a live
+        end-of-day scrape. That's correct for production, but it means a
+        fresh dev database never has enough history for the forecaster
+        (needs 30+ days) or the anomaly detector (needs 20+ days) — every
+        /forecast and /anomalies call would 422 forever on a clean clone.
+
+        This generates a deterministic (seeded) geometric random walk per
+        symbol, priced to land on the real SEED_EQUITIES value at the most
+        recent trading day, with volume jittered around the seed's volume.
+        It is explicitly synthetic — a stand-in for real scraped history —
+        and is skipped automatically once real DailyPrice rows exist.
+        """
+        import numpy as np
+
+        inserted = 0
+        for row in SEED_EQUITIES:
+            stock = self._upsert_stock(row)
+            self.db.flush()  # ensure stock.id is assigned before FK inserts
+
+            existing = (
+                self.db.query(DailyPrice)
+                .filter_by(stock_id=stock.id)
+                .count()
+            )
+            if existing >= days:
+                continue  # already backfilled
+
+            rng = np.random.default_rng(abs(hash(row["symbol"])) % (2**32))
+            anchor_price = row["price"]
+            anchor_volume = max(row["volume"], 1000)
+
+            # Trading-day calendar walking backward from today, skipping weekends
+            trading_days = []
+            d = date.today()
+            while len(trading_days) < days:
+                if d.weekday() < 5:
+                    trading_days.append(d)
+                d -= timedelta(days=1)
+            trading_days.reverse()  # oldest → newest
+
+            # Random walk in log-returns, small NSE-realistic daily vol (~1.5%),
+            # rescaled at the end so the last value matches the real anchor price.
+            daily_vol = 0.015
+            log_returns = rng.normal(loc=0.0002, scale=daily_vol, size=days)
+            log_path = np.cumsum(log_returns)
+            price_path = np.exp(log_path)
+            price_path = price_path / price_path[-1] * anchor_price  # anchor to today
+            price_path = np.maximum(price_path, 0.01)  # never zero/negative
+
+            volumes = rng.lognormal(
+                mean=np.log(max(anchor_volume, 1)), sigma=0.35, size=days
+            ).astype(int)
+
+            for i, d in enumerate(trading_days):
+                existing_row = (
+                    self.db.query(DailyPrice)
+                    .filter_by(stock_id=stock.id, date=d)
+                    .first()
+                )
+                if existing_row:
+                    continue
+                self.db.add(DailyPrice(
+                    stock_id=stock.id,
+                    date=d,
+                    close_price=round(float(price_path[i]), 2),
+                    volume=int(volumes[i]),
+                ))
+                inserted += 1
+
+        self.db.commit()
+        logger.info(f"Historical backfill: {inserted} synthetic daily-price rows")
+        return {"rows_inserted": inserted, "days_per_symbol": days}
+
     async def sync_indices(self) -> dict:
         """Scrape NSE 20 Share Index and All Share Index."""
         try:
@@ -181,27 +260,30 @@ class NSEPipeline:
             return None
 
     async def _scrape_indices(self) -> list[dict]:
-        resp = await self.client.get(NSE_INDICES_URL)
-        resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "html.parser")
-
         indices = []
-        # Look for NSE 20 and NASI values
-        for tag in soup.find_all(["td", "span", "div"], string=lambda s: s and ("NSE 20" in s or "NASI" in s)):
-            parent = tag.find_parent("tr")
-            if parent:
-                cells = [td.get_text(strip=True) for td in parent.find_all("td")]
-                if len(cells) >= 2:
-                    try:
-                        indices.append({
-                            "name": cells[0],
-                            "value": float(cells[1].replace(",", "")),
-                            "change": float(cells[2].replace(",", "")) if len(cells) > 2 else 0.0,
-                        })
-                    except (ValueError, IndexError):
-                        pass
+        try:
+            resp = await self.client.get(NSE_INDICES_URL)
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.text, "html.parser")
 
-        # Fallback hardcoded if scraping returns nothing
+            # Look for NSE 20 and NASI values
+            for tag in soup.find_all(["td", "span", "div"], string=lambda s: s and ("NSE 20" in s or "NASI" in s)):
+                parent = tag.find_parent("tr")
+                if parent:
+                    cells = [td.get_text(strip=True) for td in parent.find_all("td")]
+                    if len(cells) >= 2:
+                        try:
+                            indices.append({
+                                "name": cells[0],
+                                "value": float(cells[1].replace(",", "")),
+                                "change": float(cells[2].replace(",", "")) if len(cells) > 2 else 0.0,
+                            })
+                        except (ValueError, IndexError):
+                            pass
+        except Exception as e:
+            logger.warning(f"Index scrape failed ({e}), falling back to seed indices")
+
+        # Fallback hardcoded if scraping failed or returned nothing
         if not indices:
             indices = [
                 {"name": "NSE 20 Share Index", "value": 1_820.45, "change": 12.30},
