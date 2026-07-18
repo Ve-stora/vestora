@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
+import { useAuth } from '../store/AuthContext'
 
 export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { login, isAuthenticated, loading, error, clearError } = useAuth()
+  const { login, isAuthenticated } = useAuth()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const from = (location.state as any)?.from?.pathname ?? '/dashboard'
 
@@ -18,8 +20,16 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const ok = await login(email.trim(), password)
-    if (ok) navigate(from, { replace: true })
+    setError(null)
+    setLoading(true)
+    try {
+      await login(email.trim(), password)
+      navigate(from, { replace: true })
+    } catch (err: any) {
+      setError(err?.response?.data?.detail ?? 'Invalid credentials. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -52,8 +62,8 @@ export default function Login() {
               <svg className="w-4 h-4 text-red-400 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <span className="text-red-400 text-sm">{error.message}</span>
-              <button onClick={clearError} className="ml-auto text-red-400/60 hover:text-red-400">
+              <span className="text-red-400 text-sm">{error}</span>
+              <button onClick={() => setError(null)} className="ml-auto text-red-400/60 hover:text-red-400">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>

@@ -3,21 +3,19 @@ import { Link } from 'react-router-dom'
 import { usePolledMarketData } from '../hooks/useMarketData'
 import type { StockSummary } from '../lib/api'
 
-type SortKey = 'symbol' | 'name' | 'latest_price' | 'exchange'
+type SortKey = 'symbol' | 'name' | 'last_price'
 type SortDir = 'asc' | 'desc'
 
-const EXCHANGES = ['ALL', 'NSE', 'USE', 'DSE', 'RSE'] as const
-
+// NSE is the only exchange the live backend serves today; USE/DSE/RSE are
+// tracked in Vestora's roadmap but not yet wired up on the data side.
 export default function Market() {
   const { stocks, loading, error, refetch } = usePolledMarketData(30_000)
   const [search, setSearch] = useState('')
-  const [exchange, setExchange] = useState<string>('ALL')
   const [sortKey, setSortKey] = useState<SortKey>('symbol')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
 
   const filtered = useMemo(() => {
     let list = stocks
-    if (exchange !== 'ALL') list = list.filter((s) => s.exchange === exchange)
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       list = list.filter(
@@ -33,7 +31,7 @@ export default function Market() {
       const cmp = av < bv ? -1 : av > bv ? 1 : 0
       return sortDir === 'asc' ? cmp : -cmp
     })
-  }, [stocks, exchange, search, sortKey, sortDir])
+  }, [stocks, search, sortKey, sortDir])
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -70,7 +68,7 @@ export default function Market() {
         </button>
       </div>
 
-      {/* Filters */}
+      {/* Search */}
       <div className="flex flex-col sm:flex-row gap-3 mb-5">
         <input
           type="text"
@@ -79,21 +77,9 @@ export default function Market() {
           onChange={(e) => setSearch(e.target.value)}
           className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2 text-white placeholder-zinc-600 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 transition"
         />
-        <div className="flex gap-1">
-          {EXCHANGES.map((ex) => (
-            <button
-              key={ex}
-              onClick={() => setExchange(ex)}
-              className={`px-3 py-2 rounded-lg text-xs font-medium transition ${
-                exchange === ex
-                  ? 'bg-emerald-500 text-black'
-                  : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:border-zinc-600'
-              }`}
-            >
-              {ex}
-            </button>
-          ))}
-        </div>
+        <span className="self-center px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+          NSE · Nairobi Securities Exchange
+        </span>
       </div>
 
       {/* Error */}
@@ -120,18 +106,12 @@ export default function Market() {
               >
                 Name <SortIcon k="name" />
               </th>
-              <th
-                className="text-left px-4 py-3 cursor-pointer hover:text-zinc-200 select-none hidden md:table-cell"
-                onClick={() => toggleSort('exchange')}
-              >
-                Exchange <SortIcon k="exchange" />
-              </th>
               <th className="text-left px-4 py-3 hidden lg:table-cell text-zinc-400">Sector</th>
               <th
                 className="text-right px-4 py-3 cursor-pointer hover:text-zinc-200 select-none"
-                onClick={() => toggleSort('latest_price')}
+                onClick={() => toggleSort('last_price')}
               >
-                Price <SortIcon k="latest_price" />
+                Price <SortIcon k="last_price" />
               </th>
               <th className="text-right px-4 py-3" />
             </tr>
@@ -140,7 +120,7 @@ export default function Market() {
             {loading && stocks.length === 0 ? (
               Array.from({ length: 8 }).map((_, i) => (
                 <tr key={i} className="border-b border-zinc-800/50">
-                  {[...Array(5)].map((_, j) => (
+                  {[...Array(4)].map((_, j) => (
                     <td key={j} className="px-4 py-3">
                       <div className="h-4 bg-zinc-800 rounded animate-pulse" style={{ width: `${60 + Math.random() * 30}%` }} />
                     </td>
@@ -149,14 +129,14 @@ export default function Market() {
               ))
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-center py-16 text-zinc-600">
+                <td colSpan={4} className="text-center py-16 text-zinc-600">
                   No stocks match your filters.
                 </td>
               </tr>
             ) : (
               filtered.map((stock: StockSummary) => (
                 <tr
-                  key={`${stock.exchange}-${stock.symbol}`}
+                  key={stock.symbol}
                   className="border-b border-zinc-800/50 hover:bg-zinc-800/40 transition"
                 >
                   <td className="px-4 py-3">
@@ -165,17 +145,12 @@ export default function Market() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-white hidden sm:table-cell">{stock.name}</td>
-                  <td className="px-4 py-3 hidden md:table-cell">
-                    <span className="bg-zinc-800 text-zinc-400 text-xs px-2 py-0.5 rounded font-mono">
-                      {stock.exchange}
-                    </span>
-                  </td>
                   <td className="px-4 py-3 text-zinc-500 hidden lg:table-cell">
                     {stock.sector ?? '—'}
                   </td>
                   <td className="px-4 py-3 text-right font-mono text-white">
-                    {stock.latest_price != null
-                      ? stock.latest_price.toLocaleString('en-KE', {
+                    {stock.last_price != null
+                      ? stock.last_price.toLocaleString('en-KE', {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
                         })

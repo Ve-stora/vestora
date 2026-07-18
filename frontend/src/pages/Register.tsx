@@ -12,7 +12,7 @@ export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
 
-  const [form, setForm] = useState({ username: '', email: '', password: '', confirm: '' });
+  const [form, setForm] = useState({ fullName: '', email: '', password: '', confirm: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -22,8 +22,8 @@ export default function Register() {
   }
 
   async function handleSubmit() {
-    if (!form.username || !form.email || !form.password) {
-      setError('All fields are required.');
+    if (!form.email || !form.password) {
+      setError('Email and password are required.');
       return;
     }
     if (form.password !== form.confirm) {
@@ -37,7 +37,7 @@ export default function Register() {
 
     setLoading(true);
     try {
-      await register(form.username, form.email, form.password);
+      await register(form.email, form.password, form.fullName || undefined);
       navigate('/dashboard', { replace: true });
     } catch (err: unknown) {
       const msg =
@@ -73,11 +73,11 @@ export default function Register() {
 
           <div className="space-y-4">
             <Field
-              label="Username"
+              label="Full name (optional)"
               type="text"
-              value={form.username}
-              onChange={(v) => set('username', v)}
-              placeholder="e.g. keith"
+              value={form.fullName}
+              onChange={(v) => set('fullName', v)}
+              placeholder="e.g. Keith Ndiema"
             />
             <Field
               label="Email"
