@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
+from app.database import get_async_db
 from app.schemas.analytics import AnalyticsQuery, AnalyticsResponse
 from app.services.analytics import run_analytics_query
 from app.utils.auth import get_current_user
@@ -36,7 +36,7 @@ STRICT RULES:
 @router.post("/analytics", response_model=AnalyticsResponse)
 async def analytics_query(
     payload: AnalyticsQuery,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
     """

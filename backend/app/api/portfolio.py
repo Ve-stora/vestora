@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field, field_validator
 from typing import List
 
-from app.database import get_db
+from app.database import get_async_db
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
@@ -60,7 +60,7 @@ class PortfolioResponse(BaseModel):
 )
 async def analyze_portfolio(
     body: PortfolioRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     # TODO v0.2: wire to portfolio service
     # from app.services.portfolio import compute_portfolio_analytics
