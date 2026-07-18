@@ -32,7 +32,7 @@
 - [ ] Partnership with USE-licensed broker (Crested Capital, African Alliance Uganda)
 - [ ] URSB brand protection registration for Vestora
 
-### Why USE Now and Not Earlier
+### Why USE Later and Not Now
 USE has 17 listed companies and thin daily liquidity — insufficient for ML signal generation at launch. By Phase 2, Vestora's models will be mature enough to handle thin-market conditions, and the Ugandan institutional market (pension funds, SACCOs) provides a B2B revenue path independent of retail trading volume.
 
 
