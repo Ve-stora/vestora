@@ -16,13 +16,14 @@ import {
   Menu,
   X,
   Zap,
+  type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '../../store/AuthContext';
 
 interface NavItem {
   to: string;
   label: string;
-  Icon: React.ComponentType<{ size?: number; className?: string }>;
+  Icon: LucideIcon;
 }
 
 const NAV_ITEMS: NavItem[] = [
