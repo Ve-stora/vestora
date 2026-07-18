@@ -26,21 +26,33 @@ api.interceptors.response.use(
 // ── Auth ────────────────────────────────────────────────────────────────────
 export const authApi = {
   register: (email: string, password: string, full_name?: string) =>
-    api.post('/api/auth/register', { email, password, full_name }),
+    api
+      .post<RegisterResponse>('/api/auth/register', { email, password, full_name })
+      .then((r) => r.data),
 
   login: (email: string, password: string) =>
-    api.post<{ access_token: string; token_type: string }>(
-      '/api/auth/login',
-      new URLSearchParams({ username: email, password }),
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
-    ),
+    api
+      .post<{ access_token: string; token_type: string }>(
+        '/api/auth/login',
+        new URLSearchParams({ username: email, password }),
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
+      )
+      .then((r) => r.data),
+
+  me: () => api.get<RegisterResponse>('/api/auth/me').then((r) => r.data),
 }
 
 // ── Market ──────────────────────────────────────────────────────────────────
 export const marketApi = {
-  getStocks: () => api.get<StockSummary[]>('/api/market/stocks'),
-  getStock: (symbol: string) => api.get<StockDetail>(`/api/market/stocks/${symbol}`),
-  getForecast: (symbol: string) => api.get<Forecast>(`/api/market/forecast/${symbol}`),
+  getStocks: () =>
+    api.get<{ total: number; stocks: StockSummary[] }>('/api/market/stocks').then((r) => r.data.stocks),
+  getStock: (symbol: string) => api.get<StockDetail>(`/api/market/stocks/${symbol}`).then((r) => r.data),
+  getForecast: (symbol: string, horizon: 5 | 20 = 5) =>
+    api.get<Forecast>(`/api/market/forecast/${symbol}`, { params: { horizon } }).then((r) => r.data),
+  getAnomalies: (symbol: string, days = 7) =>
+    api
+      .get<{ anomalies: AnomalyFlag[] }>(`/api/market/anomalies/${symbol}`, { params: { days } })
+      .then((r) => r.data.anomalies),
 }
 
 // ── Portfolio ────────────────────────────────────────────────────────────────
@@ -62,34 +74,54 @@ export interface StockSummary {
   symbol: string
   name: string
   sector: string | null
-  exchange: string
-  latest_price: number | null
-  date: string | null
+  last_price: number | null
+  price_change: number | null
+  price_change_pct: number | null
+  last_synced: string | null
 }
 
 export interface StockDetail {
   symbol: string
   name: string
   sector: string | null
-  exchange: string
+  last_price: number | null
+  price_change: number | null
+  price_change_pct: number | null
   history: PriceBar[]
+  last_synced: string | null
 }
 
 export interface PriceBar {
   date: string
-  open: number | null
-  high: number | null
-  low: number | null
   close: number
   volume: number | null
 }
 
 export interface Forecast {
   symbol: string
-  model: string
-  horizon_days: number
-  note: string
-  forecast: { date: string; predicted_close: number; confidence: number }[]
+  forecast_horizon: number
+  predictions: number[]
+  confidence_lower: number[]
+  confidence_upper: number[]
+  forecast_dates: string[]
+  mape: number
+  signal: 'BULLISH' | 'BEARISH' | 'NEUTRAL'
+  signal_strength: number
+  generated_at: string
+  disclaimer: string
+}
+
+export interface AnomalyFlag {
+  symbol: string
+  date: string
+  is_anomaly: boolean
+  anomaly_score: number
+  anomaly_type: string[]
+  severity: 'LOW' | 'MEDIUM' | 'HIGH'
+  description: string
+  price: number
+  volume: number
+  price_change_pct: number
 }
 
 export interface Holding {
@@ -107,6 +139,13 @@ export interface Portfolio {
   total_value: number
   total_cost: number
   total_gain_loss: number
+}
+
+export interface RegisterResponse {
+  id: string
+  email: string
+  full_name: string | null
+  tier: 'free' | 'premium' | 'b2b'
 }
 
 export default api
