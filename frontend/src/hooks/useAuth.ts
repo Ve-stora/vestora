@@ -19,7 +19,7 @@ export function useAuth() {
       setLoading(true)
       setError(null)
       try {
-        const { data } = await authApi.login(email, password)
+        const data = await authApi.login(email, password)
         setToken(data.access_token)
         return true
       } catch (err: any) {
@@ -44,7 +44,7 @@ export function useAuth() {
       setError(null)
       try {
         await authApi.register(email, password, fullName)
-        const { data } = await authApi.login(email, password)
+        const data = await authApi.login(email, password)
         setToken(data.access_token)
         return true
       } catch (err: any) {

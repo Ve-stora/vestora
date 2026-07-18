@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { marketApi, StockSummary, StockDetail, Forecast } from '../lib/api'
+import { marketApi, StockSummary, StockDetail, Forecast, AnomalyFlag } from '../lib/api'
 
 // ── Stock list ────────────────────────────────────────────────────────────────
 
@@ -12,7 +12,7 @@ export function useMarketData() {
     setLoading(true)
     setError(null)
     try {
-      const { data } = await marketApi.getStocks()
+      const data = await marketApi.getStocks()
       setStocks(data)
     } catch (err: any) {
       setError(err?.response?.data?.detail ?? 'Failed to load market data.')
@@ -26,6 +26,23 @@ export function useMarketData() {
   }, [fetchStocks])
 
   return { stocks, loading, error, refetch: fetchStocks }
+}
+
+/**
+ * Flat "TickerRow"-shaped stock list. Named/shaped this way (with `exchange`
+ * accepted but unused) because the live backend is NSE-only for now — this
+ * keeps the call site stable for when USE/DSE/RSE support lands.
+ */
+export function useStocks(_exchange: string = 'NSE') {
+  const { stocks: raw, loading, error, refetch } = useMarketData()
+  const stocks = raw.map((s) => ({
+    symbol: s.symbol,
+    name: s.name,
+    close: s.last_price ?? 0,
+    change_pct: s.price_change_pct,
+    volume: null as number | null,
+  }))
+  return { stocks, loading, error, refetch }
 }
 
 // ── Single stock ──────────────────────────────────────────────────────────────
@@ -42,7 +59,7 @@ export function useStockDetail(symbol: string | undefined) {
     setError(null)
     marketApi
       .getStock(symbol)
-      .then(({ data }) => {
+      .then((data) => {
         if (!cancelled) setStock(data)
       })
       .catch((err) => {
@@ -74,7 +91,7 @@ export function useForecast(symbol: string | undefined) {
     setError(null)
     marketApi
       .getForecast(symbol)
-      .then(({ data }) => {
+      .then((data) => {
         if (!cancelled) setForecast(data)
       })
       .catch((err) => {
@@ -90,6 +107,43 @@ export function useForecast(symbol: string | undefined) {
   }, [symbol])
 
   return { forecast, loading, error }
+}
+
+// ── Anomalies (exchange-wide, fanned out client-side) ─────────────────────────
+// The live backend only exposes anomaly detection per-symbol
+// (GET /api/market/anomalies/{symbol}), not an exchange-wide feed. This fans
+// out across the current stock list — fine at ~20 NSE symbols, but a real
+// aggregate endpoint would be the better fix once the universe grows.
+
+export function useAnomalies(_exchange: string = 'NSE', days = 7) {
+  const { stocks } = useMarketData()
+  const [anomalies, setAnomalies] = useState<AnomalyFlag[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (stocks.length === 0) return
+    let cancelled = false
+    setLoading(true)
+
+    Promise.allSettled(stocks.map((s) => marketApi.getAnomalies(s.symbol, days)))
+      .then((results) => {
+        if (cancelled) return
+        const flagged = results
+          .filter((r): r is PromiseFulfilledResult<AnomalyFlag[]> => r.status === 'fulfilled')
+          .flatMap((r) => r.value)
+          .filter((a) => a.is_anomaly)
+        setAnomalies(flagged)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [stocks.length, days])
+
+  return { anomalies, loading }
 }
 
 // ── Auto-refresh ──────────────────────────────────────────────────────────────
